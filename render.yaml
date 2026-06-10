@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: mcp-cin7-meta
+    env: python
+    buildCommand: pip install -e .
+    startCommand: python -m cin7_meta.server_http
+    envVars:
+      - key: CIN7_ACCOUNT_ID
+        sync: false
+      - key: CIN7_API_KEY
+        sync: false
+      - key: CIN7_BASE_URL
+        value: https://inventory.dearsystems.com/ExternalApi/v2/
+      - key: ISSUE_REPORT_PATH
+        value: ./data/issue_reports.log
+      - key: SCALEKIT_ENVIRONMENT_URL
+        sync: false
+      - key: SCALEKIT_CLIENT_ID
+        sync: false
+      - key: SCALEKIT_CLIENT_SECRET
+        sync: false
+      - key: SCALEKIT_RESOURCE_ID
+        sync: false
+      - key: SCALEKIT_INTERCEPTOR_SECRET
+        sync: false
+      - key: SERVER_URL
+        value: https://mcp-cin7-meta.onrender.com
+      - key: ALLOWED_EMAILS
+        sync: false
+      - key: MCP_LOG_LEVEL
+        value: INFO
