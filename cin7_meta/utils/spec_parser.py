@@ -164,7 +164,45 @@ def _parse_json_block(block_lines: list[str]) -> Any | None:
     try:
         return json.loads(dedented)
     except (json.JSONDecodeError, ValueError):
+        pass
+    # Lenient retry: the Cin7 blueprint's JSON examples contain trailing commas
+    # (e.g. `"x": 1,\n}` or `{...},\n]`), which strict JSON rejects. Only applied
+    # after strict parsing fails, so valid JSON is never altered.
+    cleaned = re.sub(r",(\s*[}\]])", r"\1", dedented)
+    try:
+        return json.loads(cleaned)
+    except (json.JSONDecodeError, ValueError):
         return None
+
+
+def _is_list_response(schema: Any) -> bool:
+    """True when a response schema uses the Cin7 list envelope (a `*List` array property)."""
+    if not isinstance(schema, dict):
+        return False
+    props = schema.get("properties") or {}
+    return any(
+        key.endswith("List") and isinstance(val, dict) and val.get("type") == "array"
+        for key, val in props.items()
+    )
+
+
+def _synthesize_summary(endpoint: dict) -> str:
+    """Derive a verb+resource summary for endpoints whose blueprint label is just the
+    bare HTTP method (`### POST [POST]`). Lets the model distinguish readers from writers.
+    """
+    method = endpoint["method"]
+    resource = endpoint.get("group") or endpoint["path"]
+    if method == "GET":
+        verb = "List" if _is_list_response(endpoint.get("response_schema")) else "Get"
+    elif method == "POST":
+        verb = "Create"
+    elif method in {"PUT", "PATCH"}:
+        verb = "Update"
+    elif method == "DELETE":
+        verb = "Delete"
+    else:
+        verb = method.title()
+    return f"{verb} {resource}"
 
 
 def parse_apib(text: str) -> dict:
@@ -385,10 +423,15 @@ def parse_apib(text: str) -> dict:
 
     flush()
 
-    # Second pass: refine param types based on observed defaults.
+    # Second pass: refine param types based on observed defaults, and synthesize a
+    # descriptive summary for endpoints whose blueprint label is just the bare method.
     for endpoint in catalog["endpoints"]:
         for param in endpoint["query_params"]:
             if param["default"] is not None:
                 param["type"] = _normalize_type(param["type"], param["default"])
+
+        summary = (endpoint.get("summary") or "").strip()
+        if not summary or summary.upper() == endpoint["method"]:
+            endpoint["summary"] = _synthesize_summary(endpoint)
 
     return catalog

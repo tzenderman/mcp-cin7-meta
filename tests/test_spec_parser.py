@@ -188,6 +188,143 @@ HOST: https://x/
     assert e["path"] == "Foo"
 
 
+def test_trailing_comma_in_request_body_is_tolerated():
+    """The Cin7 blueprint's JSON examples have trailing commas (invalid JSON).
+
+    The parser must still capture the body rather than dropping it with a warning.
+    """
+    src = """FORMAT: 1A
+HOST: https://x/
+
+# Group Supplier
+## Supplier [/supplier]
+### POST [POST]
++ Request (application/json)
+    + Body
+
+            {
+                "Name": "Acme",
+                "Currency": "USD",
+            }
+
++ Response 200 (application/json)
+    + Body
+
+            {"ok": true}
+"""
+    cat = parse_apib(src)
+    e = next(e for e in cat["endpoints"] if e["method"] == "POST")
+    assert e["request_body_example"] == {"Name": "Acme", "Currency": "USD"}
+    assert e["request_body_schema"] is not None
+    assert "Name" in e["request_body_schema"]["properties"]
+    assert not any("request body" in w["reason"].lower() for w in cat["parser_warnings"])
+
+
+def test_trailing_comma_in_nested_response_body_is_tolerated():
+    """Trailing commas appear inside nested arrays/objects too."""
+    src = """FORMAT: 1A
+HOST: https://x/
+
+# Group Supplier
+## Supplier [/supplier]
+### GET [GET /supplier]
++ Response 200 (application/json)
+    + Body
+
+            {
+                "Total": 1,
+                "SupplierList": [
+                    {"ID": "a", "Name": "Acme",},
+                ],
+            }
+"""
+    cat = parse_apib(src)
+    e = next(e for e in cat["endpoints"] if e["method"] == "GET")
+    assert e["response_example"]["SupplierList"][0]["Name"] == "Acme"
+    assert "SupplierList" in e["response_schema"]["properties"]
+
+
+def test_bare_method_labels_get_descriptive_summaries():
+    """When the blueprint's action label is just the HTTP method (`### POST [POST]`),
+    synthesize a verb+resource summary so the model can tell readers from writers.
+    A GET with the Cin7 list envelope (`*List` array) reads as "List", not "Get".
+    """
+    src = """FORMAT: 1A
+HOST: https://x/
+
+# Group Supplier
+## Supplier [/supplier]
+### GET [GET /supplier?Page={Page}]
++ Response 200 (application/json)
+    + Body
+
+            {"Total": 1, "SupplierList": [{"ID": "a"}]}
+
+### POST [POST]
++ Request (application/json)
+    + Body
+
+            {"Name": "Acme"}
+
++ Response 200 (application/json)
+    + Body
+
+            {"ID": "a"}
+
+### PUT [PUT]
++ Request (application/json)
+    + Body
+
+            {"ID": "a", "Name": "Acme2"}
+
++ Response 200 (application/json)
+    + Body
+
+            {"ID": "a"}
+"""
+    cat = parse_apib(src)
+    get = next(e for e in cat["endpoints"] if e["method"] == "GET")
+    post = next(e for e in cat["endpoints"] if e["method"] == "POST")
+    put = next(e for e in cat["endpoints"] if e["method"] == "PUT")
+    assert get["summary"] == "List Supplier"
+    assert post["summary"] == "Create Supplier"
+    assert put["summary"] == "Update Supplier"
+
+
+def test_bare_method_single_get_and_delete_summaries():
+    """A GET without a list envelope reads as "Get"; DELETE reads as "Delete"."""
+    src = """FORMAT: 1A
+HOST: https://x/
+
+# Group Sale
+## Sale [/Sale]
+### GET [GET /Sale?ID={ID}]
++ Response 200 (application/json)
+    + Body
+
+            {"ID": "s1", "Status": "DRAFT", "Lines": []}
+
+### DELETE [DELETE /Sale?ID={ID}]
++ Response 200 (application/json)
+    + Body
+
+            {"ok": true}
+"""
+    cat = parse_apib(src)
+    get = next(e for e in cat["endpoints"] if e["method"] == "GET")
+    delete = next(e for e in cat["endpoints"] if e["method"] == "DELETE")
+    assert get["summary"] == "Get Sale"
+    assert delete["summary"] == "Delete Sale"
+
+
+def test_descriptive_action_labels_are_not_overwritten(catalog):
+    """A real, human-written action label must survive summary synthesis."""
+    get = _find(catalog, "GET", "Product")
+    post = _find(catalog, "POST", "Product")
+    assert "list of products" in get["summary"].lower()
+    assert "create a product" in post["summary"].lower()
+
+
 def test_unparseable_section_recorded_as_warning_not_exception():
     """An action with malformed parameter syntax shouldn't break parsing; the endpoint still ships."""
     src = """FORMAT: 1A
