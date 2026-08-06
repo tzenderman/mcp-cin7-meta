@@ -27,7 +27,9 @@ from .errors import (
     Cin7AuthError,
     Cin7NotFoundError,
     Cin7RateLimitError,
+    Cin7ReadOnlyError,
 )
+from .read_only import method_is_allowed, refusal_message
 
 logger = logging.getLogger(__name__)
 
@@ -105,9 +107,15 @@ class Cin7Client:
             Cin7NotFoundError: HTTP 404.
             Cin7RateLimitError: HTTP 429 after retries exhausted.
             Cin7APIError: HTTP 5xx after retries, network failures, etc.
+            Cin7ReadOnlyError: `CIN7_READ_ONLY` is set and `method` is not GET.
+                Raised before the request is built, so no write ever reaches the
+                network. This is the chokepoint every caller passes through.
         """
         method_lower = method.lower()
         normalized_path = path.lstrip("/")
+
+        if not method_is_allowed(method):
+            raise Cin7ReadOnlyError(refusal_message(method, normalized_path))
 
         async with httpx.AsyncClient(
             base_url=self.base_url,
