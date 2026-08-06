@@ -57,6 +57,7 @@ This mode runs the server as a web service with OAuth 2.0 authentication via [Sc
 **Optional:**
 - `ALLOWED_EMAILS` - Comma-separated list of allowed email addresses (leave empty to allow all authenticated users)
 - `CIN7_BASE_URL` - Override the Cin7 base URL (default `https://inventory.dearsystems.com/ExternalApi/v2/`)
+- `CIN7_READ_ONLY` - Set to `1` to execute GET requests only; every other verb is refused before the network. See [Read-only mode](#read-only-mode).
 - `ISSUE_REPORT_PATH` - Where `report_issue` appends its `ISSUE_REPORT <json>` lines (default `./data/issue_reports.log`)
 - `MCP_LOG_LEVEL` - Logging level (default `INFO`)
 - `MCP_LOG_FILE` - Enable file logging with rotation
@@ -88,7 +89,7 @@ This mode runs the server locally using stdio transport for direct integration w
 - `CIN7_ACCOUNT_ID`
 - `CIN7_API_KEY`
 
-**Optional:** `CIN7_BASE_URL`, `ISSUE_REPORT_PATH`, `MCP_LOG_LEVEL`, `MCP_LOG_FILE`.
+**Optional:** `CIN7_BASE_URL`, `CIN7_READ_ONLY`, `ISSUE_REPORT_PATH`, `MCP_LOG_LEVEL`, `MCP_LOG_FILE`.
 
 **Claude Desktop configuration:**
 
@@ -158,7 +159,7 @@ npx @modelcontextprotocol/inspector http://localhost:3000/mcp
 - `get_api_endpoint_schema(method, path)` — Return the full schema for one endpoint: query params (with types and defaults), request body schema, response schema, and JSON examples.
 
 **Execution:**
-- `invoke_api_endpoint(method, path, query_params, body)` — Validate, then execute, an arbitrary Cin7 Core API call. Validation errors (unknown endpoint, wrong method, missing required param, type mismatch) are returned **without** a network call. Returns `{"status", "data", "rate_limit_remaining"}` — use `rate_limit_remaining` for self-throttling.
+- `invoke_api_endpoint(method, path, query_params, body)` — Validate, then execute, an arbitrary Cin7 Core API call. Validation errors (unknown endpoint, wrong method, missing required param, type mismatch) are returned **without** a network call. Returns `{"status", "data", "rate_limit_remaining"}` — use `rate_limit_remaining` for self-throttling. Under `CIN7_READ_ONLY=1` any non-GET call is refused without a network call.
 
 **Issue reporting:**
 - `report_issue(summary, tool_name, tool_arguments, observed_behavior, expected_behavior, ...)` — File a structured bug report when a tool doesn't behave as expected. Each report is appended as one `ISSUE_REPORT <json>` line to `data/issue_reports.log` *and* emitted on stderr in the same format, so reports survive even on hosts with ephemeral filesystems (Render's log stream captures the stderr line). Returns a `report_id` the model can quote in follow-ups.
@@ -208,6 +209,48 @@ No new code should be merged without corresponding test coverage. See [CLAUDE.md
 - **`utils/`** - Shared utilities
 
 See [CLAUDE.md](CLAUDE.md) for comprehensive development documentation, test patterns, and architecture details.
+
+## Read-only mode
+
+This server exposes exactly one data tool, `invoke_api_endpoint`, and it walks the
+entire Cin7 REST spec — so the same tool that fetches a sale order can also create
+or void one. There is no read-only subset to grant instead. That makes the tool
+ungrantable to an agent whose read-only boundary is absolute, no matter how the
+consuming host's tool allowlist is written.
+
+Setting `CIN7_READ_ONLY=1` fixes that at the server:
+
+```jsonc
+"env": {
+  "CIN7_ACCOUNT_ID": "...",
+  "CIN7_API_KEY": "...",
+  "CIN7_READ_ONLY": "1"
+}
+```
+
+Accepted truthy values: `1`, `true`, `yes`, `on` (case-insensitive, surrounding
+whitespace ignored). Anything else — including unset — leaves the server in normal
+read-write mode, so existing deployments are unaffected.
+
+**What it does.** Only `GET` is executed. `POST`, `PUT`, `PATCH` and `DELETE` are
+refused *before any request is built*, so no write can reach Cin7. Enforcement sits
+in two independent places, neither load-bearing alone:
+
+1. `invoke_api_endpoint` checks first and returns a structured error on the same
+   shape as a validation failure, so the model reads a clear refusal;
+2. `Cin7Client.invoke()` raises `Cin7ReadOnlyError` — the chokepoint every request
+   passes through, including any future caller that skips layer 1.
+
+The server's MCP instructions also announce the mode, so the model is told up front
+rather than discovering it by failing.
+
+**What it does not do.** `list_api_endpoints` still returns write endpoints: it
+describes the Cin7 API, not your permissions. Discovery is harmless; execution is
+what is blocked.
+
+**This is a second layer, not the only one.** The consuming host should still grant
+the tool deliberately. The point is that the guarantee no longer depends on the
+host's allowlist or on the model's restraint — it holds inside this process.
 
 ## Security
 

@@ -19,6 +19,7 @@ import logging
 from typing import Any
 
 from cin7_meta.utils.cin7_client import get_cin7_client
+from cin7_meta.utils.read_only import method_is_allowed, refusal_message
 from cin7_meta.utils.spec_loader import get_spec
 from cin7_meta.utils.validator import validate_invocation
 
@@ -47,6 +48,8 @@ async def invoke_api_endpoint(
         Success: `{"status": 200, "data": <json>, "rate_limit_remaining": "59"}`.
         Cin7 4xx response: `{"status": 4xx, "data": <body or null>, "errors": [...]}`.
         Validation failure: `{"status": null, "data": null, "errors": [...]}`.
+        Read-only refusal (`CIN7_READ_ONLY=1` and method is not GET):
+            `{"status": null, "data": null, "errors": [...]}`, no network call.
 
     Raises:
         Cin7AuthError | Cin7NotFoundError | Cin7RateLimitError | Cin7APIError:
@@ -59,6 +62,14 @@ async def invoke_api_endpoint(
         len(query_params or {}),
         body is not None,
     )
+
+    # Read-only gate: refuse writes before spec lookup and before any network
+    # call. Checked first so the refusal is unambiguous — a write to an unknown
+    # path should report "read-only", not "endpoint not found".
+    if not method_is_allowed(method):
+        message = refusal_message(method, path)
+        logger.warning("invoke_api_endpoint refused (read-only): %s", message)
+        return {"status": None, "data": None, "errors": [{"message": message}]}
 
     spec = get_spec()
     endpoint = spec.get_endpoint(method, path)
