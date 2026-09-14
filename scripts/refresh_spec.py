@@ -59,16 +59,16 @@ def fetch_apib() -> str:
 
 def write_apib(text: str) -> None:
     SPEC_DIR.mkdir(parents=True, exist_ok=True)
-    APIB_PATH.write_text(text)
+    APIB_PATH.write_text(text, encoding="utf-8")
     logger.info("Wrote %s (%d bytes)", APIB_PATH, APIB_PATH.stat().st_size)
 
 
 def parse_and_write_catalog() -> dict:
-    text = APIB_PATH.read_text()
+    text = APIB_PATH.read_text(encoding="utf-8")
     catalog = parse_apib(text)
     catalog["generated_at"] = datetime.now(timezone.utc).isoformat()
     catalog["source"] = SOURCE_URL
-    JSON_PATH.write_text(json.dumps(catalog, indent=2, sort_keys=False))
+    JSON_PATH.write_text(json.dumps(catalog, indent=2, sort_keys=False), encoding="utf-8")
     logger.info(
         "Parsed %d endpoints across %d groups. %d parser warnings.",
         len(catalog["endpoints"]),
