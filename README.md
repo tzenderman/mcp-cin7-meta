@@ -17,7 +17,7 @@ It's a sibling to [`mcp-cin7-core`](../mcp-cin7-core) — that server ships hand
 
 ## Prerequisites
 
-- Python 3.10+
+- Python 3.11+
 - [uv](https://docs.astral.sh/uv/) package manager
 - A Cin7 Core (DEAR) account with API access — get your `AccountID` and `Application Key` from **Integrations → API**
 
