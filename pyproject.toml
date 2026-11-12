@@ -20,6 +20,11 @@ dependencies = [
 [tool.hatch.build.targets.wheel]
 packages = ["cin7_meta"]
 
+[project.scripts]
+# Launched by installers that run a package-installed bin/ script (e.g. Atrium's
+# local MCP servers). Stdio transport: no OAuth, credentials come from env.
+mcp-cin7-meta = "cin7_meta.server_stdio:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
