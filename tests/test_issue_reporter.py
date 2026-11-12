@@ -88,3 +88,67 @@ class TestRecordIssue:
         json_portion = line.split("ISSUE_REPORT ", 1)[1]
         parsed = json.loads(json_portion)
         assert parsed["summary"] == "prefixed"
+
+
+class TestRedaction:
+    """Reports carry model-supplied arguments and response excerpts, which can
+    contain credentials or customer PII. Both sinks (log line + file) must
+    receive the redacted payload."""
+
+    def _record(self, tmp_path, monkeypatch, caplog, payload):
+        path = tmp_path / "issues.log"
+        monkeypatch.setenv("ISSUE_REPORT_PATH", str(path))
+        with caplog.at_level(logging.INFO):
+            record_issue(payload)
+        log_line = next(r.getMessage() for r in caplog.records if r.getMessage().startswith("ISSUE_REPORT "))
+        return path.read_text(), log_line
+
+    def test_redacts_values_under_secret_keys_at_any_depth(self, tmp_path, monkeypatch, caplog):
+        stored, logged = self._record(tmp_path, monkeypatch, caplog, {
+            "tool_arguments": {
+                "headers": {"Authorization": "Bearer abc123", "X-Access-Token": "tok_live"},
+                "config": [{"client_secret": "s3cr3t", "password": "hunter2", "api_key": "k"}],
+            },
+        })
+        for sink in (stored, logged):
+            for leaked in ("abc123", "tok_live", "s3cr3t", "hunter2"):
+                assert leaked not in sink
+            assert "[REDACTED]" in sink
+
+    def test_redacts_cin7_auth_headers_and_env_names(self, tmp_path, monkeypatch, caplog):
+        # "applicationkey" does not match api[_-]?key, so Cin7's own credential
+        # names need explicit coverage.
+        account_id = "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"
+        app_key = "9a8b7c6d-5e4f-3a2b-1c0d-ef0123456789"
+        stored, logged = self._record(tmp_path, monkeypatch, caplog, {
+            "tool_arguments": {
+                "headers": {"api-auth-accountid": account_id, "api-auth-applicationkey": app_key},
+                "env": {"CIN7_ACCOUNT_ID": account_id, "CIN7_API_KEY": app_key},
+            },
+        })
+        for sink in (stored, logged):
+            assert account_id not in sink
+            assert app_key not in sink
+
+    def test_masks_email_addresses(self, tmp_path, monkeypatch, caplog):
+        stored, logged = self._record(tmp_path, monkeypatch, caplog, {
+            "response_excerpt": '{"Customer": "Jane", "Email": "jane.doe@example.com"}',
+        })
+        for sink in (stored, logged):
+            assert "jane.doe@example.com" not in sink
+
+    def test_keeps_debugging_data_intact(self, tmp_path, monkeypatch, caplog):
+        args = {
+            "method": "GET",
+            "path": "Product",
+            "query_params": {"ID": "3fa85f64-5717-4562-b3fc-2c963f66afa6", "Sku": "WIDGET-001"},
+            # Real Cin7 fields that merely contain "AccountId" are not credentials.
+            "body": {"BankAccountId": "b1c2d3e4-0000-1111-2222-333344445555", "AccountID": "200"},
+        }
+        stored, _ = self._record(tmp_path, monkeypatch, caplog, {
+            "summary": "product lookup failed",
+            "tool_arguments": args,
+        })
+        payload = _parse_line(stored.strip())
+        assert payload["tool_arguments"] == args
+        assert payload["summary"] == "product lookup failed"

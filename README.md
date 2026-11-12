@@ -201,7 +201,6 @@ No new code should be merged without corresponding test coverage. See [CLAUDE.md
 - **`spec_search.py`** - Ranked substring search over the spec index (exact path > prefix > substring > summary/param-name match)
 - **`validator.py`** - Validates query params (unknowns, required, types) and body (required fields) against the loaded spec; returns structured error responses instead of raising
 - **`issue_reporter.py`** - Single-function entry point for `report_issue` storage — appends one `ISSUE_REPORT <json>` line to a controlled file *and* to stderr
-- **`session_store.py`** - In-memory session storage with TTL (ported)
 - **`server.py`** - FastMCP server with the four tool registrations
 - **`server_http.py`** - Starlette wrapper with MCP Streamable HTTP transport and ScaleKit OAuth (ported)
 - **`server_stdio.py`** - Stdio transport for local Claude Desktop integration

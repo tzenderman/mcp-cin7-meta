@@ -70,7 +70,6 @@ tests/
   test_issue_reporter.py            # record_issue() unit tests
   test_report_issue.py              # MCP tool wrapper
   test_cin7_client.py               # retry/auth/error suite (single-tenant)
-  test_session_store.py             # ported in-memory session TTL
   test_logging.py                   # truncate() + setup_logging() env reading
   test_errors.py                    # Cin7*Error hierarchy
   test_server.py                    # EXPECTED_TOOLS = {"list_api_endpoints","get_api_endpoint_schema","invoke_api_endpoint","report_issue"}
@@ -127,13 +126,14 @@ Never write production code before its test exists and fails. Never adapt previo
 - Body: strict on required fields, permissive on extras (Cin7 accepts extras)
 
 **`cin7_meta/utils/issue_reporter.py`** — single-function `record_issue(payload)`
+- Redacts first (both sinks): values under secret-like keys (incl. Cin7 `api-auth-*` headers and `CIN7_ACCOUNT_ID`), email addresses
 - Always: structured `ISSUE_REPORT <json>` log line on stderr (captured by Render's log stream)
 - Best-effort: append the same `ISSUE_REPORT <json>` line to `data/issue_reports.log` (configurable via `ISSUE_REPORT_PATH`). Identical format to the stderr line so the same `grep ISSUE_REPORT` works against either source.
 - Returns `(report_id, wrote_to_file)`
 
 **`cin7_meta/server.py`** — slim FastMCP registration (4 `mcp.tool()(fn)` calls)
 
-**`cin7_meta/server_http.py`** — Starlette wrapper with ScaleKit OAuth + interceptors + session store (ported, package paths swapped)
+**`cin7_meta/server_http.py`** — Starlette wrapper with ScaleKit OAuth (bearer tokens only; no session cookies)
 
 **`cin7_meta/server_stdio.py`** — stdio entrypoint with env validation
 
