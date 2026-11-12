@@ -126,6 +126,7 @@ Never write production code before its test exists and fails. Never adapt previo
 - Body: strict on required fields, permissive on extras (Cin7 accepts extras)
 
 **`cin7_meta/utils/issue_reporter.py`** — single-function `record_issue(payload)`
+- Redacts first (both sinks): values under secret-like keys (incl. Cin7 `api-auth-*` headers and `CIN7_ACCOUNT_ID`), email addresses
 - Always: structured `ISSUE_REPORT <json>` log line on stderr (captured by Render's log stream)
 - Best-effort: append the same `ISSUE_REPORT <json>` line to `data/issue_reports.log` (configurable via `ISSUE_REPORT_PATH`). Identical format to the stderr line so the same `grep ISSUE_REPORT` works against either source.
 - Returns `(report_id, wrote_to_file)`
