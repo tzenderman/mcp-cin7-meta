@@ -70,7 +70,6 @@ tests/
   test_issue_reporter.py            # record_issue() unit tests
   test_report_issue.py              # MCP tool wrapper
   test_cin7_client.py               # retry/auth/error suite (single-tenant)
-  test_session_store.py             # ported in-memory session TTL
   test_logging.py                   # truncate() + setup_logging() env reading
   test_errors.py                    # Cin7*Error hierarchy
   test_server.py                    # EXPECTED_TOOLS = {"list_api_endpoints","get_api_endpoint_schema","invoke_api_endpoint","report_issue"}
@@ -133,7 +132,7 @@ Never write production code before its test exists and fails. Never adapt previo
 
 **`cin7_meta/server.py`** — slim FastMCP registration (4 `mcp.tool()(fn)` calls)
 
-**`cin7_meta/server_http.py`** — Starlette wrapper with ScaleKit OAuth + interceptors + session store (ported, package paths swapped)
+**`cin7_meta/server_http.py`** — Starlette wrapper with ScaleKit OAuth (bearer tokens only; no session cookies)
 
 **`cin7_meta/server_stdio.py`** — stdio entrypoint with env validation
 
