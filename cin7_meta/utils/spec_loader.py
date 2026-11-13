@@ -1,13 +1,18 @@
 """Load and index a normalized Cin7 Core spec catalog.
 
-The result of `scripts/refresh_spec.py` is expected to live at
-`cin7_meta/spec/cin7_v2.json`. This module loads it lazily and builds two
-in-memory indexes:
+The catalog written by `cin7-meta-refresh-spec` (see `cin7_meta/cli/refresh_spec.py`)
+ships in the package at `cin7_meta/spec/cin7_v2.json`. This module loads it
+lazily and builds two in-memory indexes:
 
 - `endpoints_by_key`: `"METHOD path"` -> `EndpointDef`
 - `search_entries`: flat list used by `spec_search` for ranked lookup
 
-The default path can be overridden with the `CIN7_SPEC_PATH` env var.
+Which file is loaded (first match wins, see `resolve_spec_path`):
+
+1. `CIN7_SPEC_PATH` — an explicit catalog *file*, used as-is.
+2. `CIN7_SPEC_DIR`  — a *directory* holding `cin7_v2.json` (where
+   `cin7-meta-refresh-spec` writes when the var is set), if that file exists.
+3. The catalog shipped inside the package.
 """
 
 from __future__ import annotations
@@ -21,8 +26,51 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+SPEC_FILENAME = "cin7_v2.json"
 SPEC_DIR = Path(__file__).resolve().parent.parent / "spec"
-DEFAULT_SPEC_PATH = SPEC_DIR / "cin7_v2.json"
+DEFAULT_SPEC_PATH = SPEC_DIR / SPEC_FILENAME
+REFRESH_COMMAND = "cin7-meta-refresh-spec"
+
+
+def spec_dir_from_env() -> Path | None:
+    """The `CIN7_SPEC_DIR` directory (with `~` expanded), or None if unset."""
+    raw = os.getenv("CIN7_SPEC_DIR", "").strip()
+    return Path(raw).expanduser() if raw else None
+
+
+def resolve_spec_path() -> Path:
+    """Pick the catalog file to load: CIN7_SPEC_PATH > CIN7_SPEC_DIR > packaged.
+
+    Raises FileNotFoundError naming every path checked when no catalog exists.
+    """
+    explicit = os.getenv("CIN7_SPEC_PATH", "").strip()
+    if explicit:
+        return Path(explicit).expanduser()
+
+    checked: list[Path] = []
+    spec_dir = spec_dir_from_env()
+    if spec_dir is not None:
+        candidate = spec_dir / SPEC_FILENAME
+        if candidate.is_file():
+            return candidate
+        checked.append(candidate)
+        logger.warning(
+            "CIN7_SPEC_DIR is set but %s does not exist; falling back to the "
+            "packaged spec. Run `%s` to populate it.",
+            candidate,
+            REFRESH_COMMAND,
+        )
+
+    if DEFAULT_SPEC_PATH.is_file():
+        return DEFAULT_SPEC_PATH
+    checked.append(DEFAULT_SPEC_PATH)
+
+    raise FileNotFoundError(
+        "No Cin7 spec catalog found. Checked: "
+        + ", ".join(str(p) for p in checked)
+        + f". Generate one with `{REFRESH_COMMAND}` (writes to CIN7_SPEC_DIR when "
+        "set), or point CIN7_SPEC_PATH at an existing catalog file."
+    )
 
 
 def _normalize_key(method: str, path: str) -> str:
@@ -127,13 +175,12 @@ _spec: SpecIndex | None = None
 def get_spec() -> SpecIndex:
     """Return the cached SpecIndex, loading on first call.
 
-    Reads `CIN7_SPEC_PATH` env var if set, otherwise resolves the default
-    `cin7_meta/spec/cin7_v2.json`. Fails loud if the file is missing or
+    The file comes from `resolve_spec_path()`. Fails loud if it is missing or
     malformed.
     """
     global _spec
     if _spec is None:
-        path = os.getenv("CIN7_SPEC_PATH") or str(DEFAULT_SPEC_PATH)
+        path = str(resolve_spec_path())
         logger.info("Loading Cin7 spec from %s", path)
         _spec = load_spec_from_path(path)
         logger.info(

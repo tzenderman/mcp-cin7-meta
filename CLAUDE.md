@@ -18,12 +18,14 @@ The model is expected to chain them: list → read schema → call. Read [docs/t
 The server validates and indexes against a **vendored** API Blueprint at `cin7_meta/spec/cin7_v2.apib` plus its derived normalized catalog at `cin7_meta/spec/cin7_v2.json`. To refresh:
 
 ```bash
-uv run python scripts/refresh_spec.py
+uv run cin7-meta-refresh-spec     # scripts/refresh_spec.py is a thin wrapper around it
 ```
 
 See [docs/spec_refresh.md](docs/spec_refresh.md) for the workflow and when to refresh.
 
-Source URL: `https://dearinventory.docs.apiary.io/api-description-document`. Override the local path with `CIN7_SPEC_PATH` env var.
+Source URL: `https://dearinventory.docs.apiary.io/api-description-document`. Spec lookup order: `CIN7_SPEC_PATH` (explicit file), then `CIN7_SPEC_DIR/cin7_v2.json` (if present), then the packaged catalog. The refresh command writes to `CIN7_SPEC_DIR` when set.
+
+Console scripts (`[project.scripts]`): `cin7-meta-stdio`, `cin7-meta-http`, `cin7-meta-refresh-spec`, plus `mcp-cin7-meta` (same as stdio, kept for Atrium). The spec ships in the wheel, so `uvx --from git+https://github.com/tzenderman/mcp-cin7-meta@<sha> cin7-meta-stdio` runs without a clone.
 
 ## ScaleKit Configuration
 
@@ -61,7 +63,9 @@ tests/
     mini_spec.py                    # hand-rolled small normalized catalog (fast tests)
     mini_apib.py                    # hand-rolled small API Blueprint sample (parser tests)
   test_spec_parser.py               # API Blueprint -> normalized JSON
-  test_spec_loader.py               # load + index normalized JSON
+  test_spec_loader.py               # load + index normalized JSON; spec path resolution order
+  test_refresh_spec_cli.py          # cin7-meta-refresh-spec writes to CIN7_SPEC_DIR (no network)
+  test_entry_point.py               # every console script resolves to the right main()
   test_spec_search.py               # ranked substring search
   test_validator.py                 # unknowns / required / type coercion
   test_list_api_endpoints.py        # MCP tool wrapper
@@ -106,14 +110,14 @@ Never write production code before its test exists and fails. Never adapt previo
 - Auth headers `api-auth-accountid` + `api-auth-applicationkey` from `CIN7_ACCOUNT_ID` + `CIN7_API_KEY`
 
 **`cin7_meta/utils/spec_loader.py`** — module-import-time loader
-- Reads `cin7_meta/spec/cin7_v2.json`
+- Reads the catalog chosen by `resolve_spec_path()`: `CIN7_SPEC_PATH` > `CIN7_SPEC_DIR/cin7_v2.json` > `cin7_meta/spec/cin7_v2.json`
 - Builds `endpoints_by_key: dict[str, EndpointDef]` and `search_entries: list[SearchEntry]`
 - Fails loud at import if file missing/malformed
 
 **`cin7_meta/utils/spec_parser.py`** — API Blueprint markdown → normalized JSON
 - Walks markdown headers and `+ Parameters` / `+ Request` / `+ Response` blocks
 - Permissive: parsing failures become `parser_warnings` entries, never exceptions
-- Used by `scripts/refresh_spec.py` at refresh time
+- Used by `cin7_meta/cli/refresh_spec.py` (`cin7-meta-refresh-spec`) at refresh time
 
 **`cin7_meta/utils/spec_search.py`** — ranked keyword search
 - Substring match (case-insensitive) over path, summary, group, param names

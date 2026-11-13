@@ -126,3 +126,79 @@ def test_real_vendored_spec_loads():
     # A spot-check endpoint that's definitely real (Cin7 uses lowercase /product)
     assert spec.get_endpoint("GET", "product") is not None
     assert spec.get_endpoint("POST", "product") is not None
+
+
+# --- Spec path resolution: CIN7_SPEC_PATH (file) > CIN7_SPEC_DIR (dir) > packaged ---
+
+
+@pytest.fixture
+def clean_spec_env(monkeypatch):
+    monkeypatch.delenv("CIN7_SPEC_PATH", raising=False)
+    monkeypatch.delenv("CIN7_SPEC_DIR", raising=False)
+    return monkeypatch
+
+
+def test_resolve_uses_packaged_spec_when_no_env(clean_spec_env):
+    from cin7_meta.utils.spec_loader import DEFAULT_SPEC_PATH, resolve_spec_path
+
+    assert resolve_spec_path() == DEFAULT_SPEC_PATH
+
+
+def test_resolve_prefers_spec_dir_when_file_present(clean_spec_env, tmp_path):
+    from cin7_meta.utils.spec_loader import SPEC_FILENAME, resolve_spec_path
+
+    (tmp_path / SPEC_FILENAME).write_text(json.dumps(MINI_CATALOG))
+    clean_spec_env.setenv("CIN7_SPEC_DIR", str(tmp_path))
+    assert resolve_spec_path() == tmp_path / SPEC_FILENAME
+
+
+def test_resolve_expands_user_in_spec_dir(clean_spec_env, tmp_path):
+    from cin7_meta.utils.spec_loader import SPEC_FILENAME, resolve_spec_path
+
+    (tmp_path / "s").mkdir()
+    (tmp_path / "s" / SPEC_FILENAME).write_text(json.dumps(MINI_CATALOG))
+    clean_spec_env.setenv("HOME", str(tmp_path))
+    clean_spec_env.setenv("CIN7_SPEC_DIR", "~/s")
+    assert resolve_spec_path() == tmp_path / "s" / SPEC_FILENAME
+
+
+def test_resolve_falls_back_to_packaged_when_spec_dir_empty(clean_spec_env, tmp_path):
+    from cin7_meta.utils.spec_loader import DEFAULT_SPEC_PATH, resolve_spec_path
+
+    clean_spec_env.setenv("CIN7_SPEC_DIR", str(tmp_path))
+    assert resolve_spec_path() == DEFAULT_SPEC_PATH
+
+
+def test_resolve_explicit_spec_path_wins_over_spec_dir(clean_spec_env, tmp_path):
+    from cin7_meta.utils.spec_loader import SPEC_FILENAME, resolve_spec_path
+
+    (tmp_path / SPEC_FILENAME).write_text(json.dumps(MINI_CATALOG))
+    explicit = tmp_path / "pinned.json"
+    explicit.write_text(json.dumps(MINI_CATALOG))
+    clean_spec_env.setenv("CIN7_SPEC_DIR", str(tmp_path))
+    clean_spec_env.setenv("CIN7_SPEC_PATH", str(explicit))
+    assert resolve_spec_path() == explicit
+
+
+def test_resolve_error_names_checked_paths_and_refresh_command(clean_spec_env, tmp_path):
+    from cin7_meta.utils import spec_loader as mod
+
+    missing_pkg = tmp_path / "pkg" / mod.SPEC_FILENAME
+    clean_spec_env.setattr(mod, "DEFAULT_SPEC_PATH", missing_pkg)
+    clean_spec_env.setenv("CIN7_SPEC_DIR", str(tmp_path / "dir"))
+
+    with pytest.raises(FileNotFoundError) as exc:
+        mod.resolve_spec_path()
+    msg = str(exc.value)
+    assert str(tmp_path / "dir" / mod.SPEC_FILENAME) in msg
+    assert str(missing_pkg) in msg
+    assert "cin7-meta-refresh-spec" in msg
+
+
+def test_get_spec_reads_from_spec_dir(clean_spec_env, tmp_path):
+    from cin7_meta.utils import spec_loader as mod
+
+    (tmp_path / mod.SPEC_FILENAME).write_text(json.dumps(MINI_CATALOG))
+    clean_spec_env.setenv("CIN7_SPEC_DIR", str(tmp_path))
+    clean_spec_env.setattr(mod, "_spec", None)
+    assert len(mod.get_spec().endpoints_by_key) == 4
