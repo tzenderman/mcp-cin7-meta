@@ -1,6 +1,6 @@
 # Refreshing the vendored API Blueprint
 
-The MCP server validates and indexes against a vendored copy of Cin7 Core's API Blueprint at `cin7_meta/spec/cin7_v2.apib`, plus a derived normalized JSON catalog at `cin7_meta/spec/cin7_v2.json`. Both ship in this repo so a fresh clone works without a network call.
+The MCP server validates and indexes against a vendored copy of Cin7 Core's API Blueprint at `cin7_meta/spec/cin7_v2.apib`, plus a derived normalized JSON catalog at `cin7_meta/spec/cin7_v2.json`. Both are committed and ship inside the installed package, so a fresh clone or a `uvx --from git+...` install works without a network call.
 
 ## When to refresh
 
@@ -12,26 +12,48 @@ There's no version pin — the Apiary publication is rolling. Refresh whenever y
 
 ## How to refresh
 
-From a fresh clone:
+The refresh logic lives in the package (`cin7_meta/cli/refresh_spec.py`) and installs as the `cin7-meta-refresh-spec` command.
+
+**From a clone** (updates the committed spec; commit the result):
 
 ```bash
-uv venv
-uv pip install -e .
+uv sync
+uv run cin7-meta-refresh-spec
+# Old command, still works (thin wrapper around the same code):
 uv run python scripts/refresh_spec.py
 ```
 
-The script:
-
-1. Fetches `https://dearinventory.docs.apiary.io/api-description-document` (publicly readable; no credentials needed)
-2. Writes the raw markdown to `cin7_meta/spec/cin7_v2.apib`
-3. Parses it via `cin7_meta/utils/spec_parser.py` into `cin7_meta/spec/cin7_v2.json`
-4. Logs the endpoint count and any parser warnings
-
-Pass `--no-fetch` to re-parse the existing `.apib` without a network call (useful when iterating on the parser itself):
+**From a `uvx` install** (no clone). Write to a directory you own, then give the server the same `CIN7_SPEC_DIR`:
 
 ```bash
-uv run python scripts/refresh_spec.py --no-fetch
+export CIN7_SPEC_DIR=~/.local/share/cin7-meta/spec
+uvx --from git+https://github.com/tzenderman/mcp-cin7-meta@<sha> cin7-meta-refresh-spec
 ```
+
+Don't run it without `CIN7_SPEC_DIR` from a uvx install. With the variable unset, the command writes into the package directory inside uv's cache, which a reinstall can silently replace.
+
+The command:
+
+1. Fetches `https://dearinventory.docs.apiary.io/api-description-document` (publicly readable; no credentials needed)
+2. Writes the raw markdown to `cin7_v2.apib` in the output directory: `CIN7_SPEC_DIR` if set, otherwise `cin7_meta/spec/`
+3. Parses it via `cin7_meta/utils/spec_parser.py` into `cin7_v2.json` in the same directory
+4. Logs the endpoint count and any parser warnings
+
+Pass `--no-fetch` to re-parse the existing `.apib` in the output directory without a network call (useful when iterating on the parser itself):
+
+```bash
+uv run cin7-meta-refresh-spec --no-fetch
+```
+
+## Which spec the server loads
+
+First match wins:
+
+1. `CIN7_SPEC_PATH`: an explicit catalog **file**, used as-is (fails if missing)
+2. `CIN7_SPEC_DIR/cin7_v2.json`: used if the file exists. If it doesn't, the server logs a warning and falls through
+3. `cin7_meta/spec/cin7_v2.json`: the catalog bundled in the package
+
+If none exists, startup fails with a message that names every path checked and the `cin7-meta-refresh-spec` command.
 
 ## What lives in the catalog
 

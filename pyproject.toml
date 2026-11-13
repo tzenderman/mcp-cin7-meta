@@ -24,6 +24,10 @@ packages = ["cin7_meta"]
 # Launched by installers that run a package-installed bin/ script (e.g. Atrium's
 # local MCP servers). Stdio transport: no OAuth, credentials come from env.
 mcp-cin7-meta = "cin7_meta.server_stdio:main"
+# Named entry points, e.g. `uvx --from git+https://github.com/tzenderman/mcp-cin7-meta@<sha> cin7-meta-stdio`.
+cin7-meta-stdio = "cin7_meta.server_stdio:main"
+cin7-meta-http = "cin7_meta.server_http:main"
+cin7-meta-refresh-spec = "cin7_meta.cli.refresh_spec:main"
 
 [build-system]
 requires = ["hatchling"]

@@ -4,7 +4,7 @@
 
 1. Cin7 Core (DEAR) account with `AccountID` and `Application Key`
 2. `.env` file with `CIN7_ACCOUNT_ID` and `CIN7_API_KEY` configured
-3. Vendored spec present at `cin7_meta/spec/cin7_v2.json` (run `scripts/refresh_spec.py` once)
+3. Vendored spec present at `cin7_meta/spec/cin7_v2.json` (committed; refresh with `uv run cin7-meta-refresh-spec`)
 
 ## Automated Tests
 

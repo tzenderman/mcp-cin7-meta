@@ -89,7 +89,7 @@ This mode runs the server locally using stdio transport for direct integration w
 - `CIN7_ACCOUNT_ID`
 - `CIN7_API_KEY`
 
-**Optional:** `CIN7_BASE_URL`, `CIN7_READ_ONLY`, `ISSUE_REPORT_PATH`, `MCP_LOG_LEVEL`, `MCP_LOG_FILE`.
+**Optional:** `CIN7_BASE_URL`, `CIN7_READ_ONLY`, `CIN7_SPEC_DIR`, `CIN7_SPEC_PATH`, `ISSUE_REPORT_PATH`, `MCP_LOG_LEVEL`, `MCP_LOG_FILE`.
 
 **Claude Desktop configuration:**
 
@@ -121,6 +121,53 @@ Replace `/absolute/path/to/mcp-cin7-meta` with the actual path to your clone of 
 
 If you're running both servers together, give them distinct names (e.g. `cin7-core` for the curated server and `cin7-meta` for this one) so Claude lists their tools separately.
 
+#### Run from git with uvx (no clone)
+
+The package installs console scripts, and the spec catalog ships inside it, so you can run a pinned commit straight from GitHub. You don't need a clone or a refresh step:
+
+```bash
+uvx --from git+https://github.com/tzenderman/mcp-cin7-meta@<sha> cin7-meta-stdio
+```
+
+Pin a full commit SHA so every launch runs the same code and the same bundled spec. Example Claude Code `.mcp.json` entry:
+
+```json
+{
+  "mcpServers": {
+    "cin7-meta": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/tzenderman/mcp-cin7-meta@<sha>",
+        "cin7-meta-stdio"
+      ],
+      "env": {
+        "CIN7_ACCOUNT_ID": "your-account-id",
+        "CIN7_API_KEY": "your-application-key"
+      }
+    }
+  }
+}
+```
+
+**Picking up a newer spec without a new commit (optional).** The bundled spec is a snapshot from that commit. To use a fresher copy, set `CIN7_SPEC_DIR` to a directory you own and run the refresh command once. Then pass the same `CIN7_SPEC_DIR` in the server's `env`:
+
+```bash
+export CIN7_SPEC_DIR=~/.local/share/cin7-meta/spec
+uvx --from git+https://github.com/tzenderman/mcp-cin7-meta@<sha> cin7-meta-refresh-spec
+```
+
+**Installed commands:**
+
+| Command | Runs |
+| --- | --- |
+| `cin7-meta-stdio` | Stdio server (same as `python -m cin7_meta.server_stdio`) |
+| `cin7-meta-http` | HTTP server with ScaleKit OAuth (same as `python -m cin7_meta.server_http`) |
+| `cin7-meta-refresh-spec` | Fetches and parses the spec into `CIN7_SPEC_DIR`, or into the package's `cin7_meta/spec/` when unset |
+| `mcp-cin7-meta` | Same as `cin7-meta-stdio`. Kept for existing installers (Atrium) |
+
+**Spec lookup order:** `CIN7_SPEC_PATH` (an explicit catalog file) → `CIN7_SPEC_DIR/cin7_v2.json` (if it exists) → the catalog bundled in the package. If `CIN7_SPEC_DIR` is set but empty, the server logs a warning and uses the bundled catalog. The server fails at startup, listing every path it checked, only if no catalog exists anywhere.
+
 ### Installation
 
 ```bash
@@ -132,12 +179,12 @@ uv pip install -e .
 uv run python -c "import cin7_meta.server; print('OK')"
 ```
 
-### Vendor the API Blueprint spec (one-time)
+### The vendored API Blueprint spec
 
-This server validates requests against a vendored API Blueprint that ships at `cin7_meta/spec/cin7_v2.apib`, plus a derived normalized JSON catalog at `cin7_meta/spec/cin7_v2.json`. A fresh clone won't have these — generate them:
+This server validates requests against a vendored API Blueprint at `cin7_meta/spec/cin7_v2.apib` and a normalized JSON catalog derived from it at `cin7_meta/spec/cin7_v2.json`. Both are committed and ship in the package, so a fresh clone or a `uvx` install works without a network call. To refresh them:
 
 ```bash
-uv run python scripts/refresh_spec.py
+uv run cin7-meta-refresh-spec          # or: uv run python scripts/refresh_spec.py
 ```
 
 Re-run any time the Cin7 API changes or you want to pick up new endpoints. See [`docs/spec_refresh.md`](docs/spec_refresh.md) for the full workflow.
@@ -197,7 +244,8 @@ No new code should be merged without corresponding test coverage. See [CLAUDE.md
 
 - **`cin7_client.py`** - Async REST client for the Cin7 Core API with retry and error handling (ported from `mcp-cin7-core`)
 - **`spec_loader.py`** - Loads the vendored normalized JSON catalog at startup, builds the in-memory endpoint and search indexes
-- **`spec_parser.py`** - Parses API Blueprint markdown into the normalized JSON catalog (used by `scripts/refresh_spec.py`)
+- **`spec_parser.py`** - Parses API Blueprint markdown into the normalized JSON catalog (used by `cin7-meta-refresh-spec`)
+- **`cli/refresh_spec.py`** - The `cin7-meta-refresh-spec` command. `scripts/refresh_spec.py` is a thin wrapper around it
 - **`spec_search.py`** - Ranked substring search over the spec index (exact path > prefix > substring > summary/param-name match)
 - **`validator.py`** - Validates query params (unknowns, required, types) and body (required fields) against the loaded spec; returns structured error responses instead of raising
 - **`issue_reporter.py`** - Single-function entry point for `report_issue` storage — appends one `ISSUE_REPORT <json>` line to a controlled file *and* to stderr
