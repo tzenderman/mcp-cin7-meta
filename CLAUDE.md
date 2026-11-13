@@ -32,15 +32,12 @@ Identical setup to `mcp-cin7-core`. Register your server in the ScaleKit dashboa
 1. **MCP Servers > Add MCP Server**
 2. Server name: `cin7-meta`; Resource identifier: your server URL; Scopes: `cin7:read`, `cin7:write`
 3. Enable dynamic client registration
-4. Copy credentials to `.env`: `SCALEKIT_ENVIRONMENT_URL`, `SCALEKIT_CLIENT_ID`, `SCALEKIT_CLIENT_SECRET`, `SCALEKIT_RESOURCE_ID`
+4. Copy credentials to `.env`: `SCALEKIT_ENVIRONMENT_URL`, `SCALEKIT_RESOURCE_ID` (the server only validates tokens; it needs no client secret)
 
-### Authentication Interceptors
+### Email allowlist
 
-Same email-allowlist pattern as the sibling repo. Two interceptors (`PRE_SIGNUP`, `PRE_SESSION_CREATION`) pointed at:
-- `POST /auth/interceptors/pre-signup`
-- `POST /auth/interceptors/pre-session-creation`
-
-Set `SCALEKIT_INTERCEPTOR_SECRET` for signature verification, and `ALLOWED_EMAILS` for the allowlist (comma-separated; empty = allow all).
+Not in this server. The ScaleKit environment's `PRE_SIGNUP` and `PRE_SESSION_CREATION` interceptors call a
+separate, central service that holds the allowlist, so this server needs no interceptor secret or `ALLOWED_EMAILS`.
 
 ## Testing
 
