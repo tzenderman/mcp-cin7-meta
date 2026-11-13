@@ -48,14 +48,10 @@ This mode runs the server as a web service with OAuth 2.0 authentication via [Sc
 - `CIN7_ACCOUNT_ID` - Your Cin7 AccountID
 - `CIN7_API_KEY` - Your Cin7 Application Key
 - `SCALEKIT_ENVIRONMENT_URL` - ScaleKit environment URL (e.g., `https://yourapp.scalekit.com`)
-- `SCALEKIT_CLIENT_ID` - ScaleKit application client ID
-- `SCALEKIT_CLIENT_SECRET` - ScaleKit application client secret
 - `SCALEKIT_RESOURCE_ID` - ScaleKit resource identifier (e.g., `res_xxx`)
-- `SCALEKIT_INTERCEPTOR_SECRET` - Secret for verifying interceptor payloads
 - `SERVER_URL` - Your MCP server's public URL (e.g., `https://your-server.example.com`)
 
 **Optional:**
-- `ALLOWED_EMAILS` - Comma-separated list of allowed email addresses (leave empty to allow all authenticated users)
 - `CIN7_BASE_URL` - Override the Cin7 base URL (default `https://inventory.dearsystems.com/ExternalApi/v2/`)
 - `CIN7_READ_ONLY` - Set to `1` to execute GET requests only; every other verb is refused before the network. See [Read-only mode](#read-only-mode).
 - `ISSUE_REPORT_PATH` - Where `report_issue` appends its `ISSUE_REPORT <json>` lines (default `./data/issue_reports.log`)
