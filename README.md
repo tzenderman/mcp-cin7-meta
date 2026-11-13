@@ -168,6 +168,8 @@ uvx --from git+https://github.com/tzenderman/mcp-cin7-meta@<sha> cin7-meta-refre
 
 **Spec lookup order:** `CIN7_SPEC_PATH` (an explicit catalog file) → `CIN7_SPEC_DIR/cin7_v2.json` (if it exists) → the catalog bundled in the package. If `CIN7_SPEC_DIR` is set but empty, the server logs a warning and uses the bundled catalog. The server fails at startup, listing every path it checked, only if no catalog exists anywhere.
 
+A populated `CIN7_SPEC_DIR` always wins over the bundled catalog, including after you bump `<sha>`. When you move to a newer commit, re-run `cin7-meta-refresh-spec` or unset `CIN7_SPEC_DIR`. Otherwise an old refreshed spec keeps shadowing the new bundled one.
+
 ### Installation
 
 ```bash
